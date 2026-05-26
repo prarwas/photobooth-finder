@@ -1,0 +1,13 @@
+import pandas as pd
+from sqlalchemy import create_engine
+
+# Connect to your local MySQL database
+engine = create_engine("mysql+pymysql://root:project26@127.0.0.1:3306/photobooth_project")
+
+# Pull the entire table into a DataFrame
+df = pd.read_sql("SELECT Title, URL, latitude, longitude FROM booths", engine)
+
+# Save it as a CSV file directly inside your project folder
+df.to_csv("clean_booths.csv", index=False)
+
+print("Success! Your clean database has been exported to clean_booths.csv")
