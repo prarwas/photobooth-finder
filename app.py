@@ -15,7 +15,11 @@ st.write("Find the closest photobooths to any location instantly.")
 # 1. Read coordinates directly from our local CSV file
 @st.cache_data
 def load_data():
-    # No SQL engine required! This works natively on any computer or cloud server.
+    # TEMPORARY DEBUG CODE: Print the first 200 characters of the file to the logs
+    with open("clean_booths.csv", "r") as f:
+        st.write("### Debugging File Content:")
+        st.code(f.read(200)) # This will display the top of your file on the web screen!
+        
     return pd.read_csv("clean_booths.csv")
 
 df = load_data()
