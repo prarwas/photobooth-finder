@@ -32,7 +32,7 @@ manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon els
 
 # --- NEW DECOUPLED API FETCH LOGIC ---
 # Define the URL pointing directly to your local FastAPI server
-API_URL = "https://photobooth-api.onrender.com/api/booths"
+API_URL = "https://photobooth-finder.onrender.com/api/booths"
 
 # Shoot the coordinates across the local network to your API
 try:
