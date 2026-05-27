@@ -2,3 +2,6 @@ streamlit
 pandas
 geopy
 streamlit-js-eval
+fastapi
+uvicorn
+requests
