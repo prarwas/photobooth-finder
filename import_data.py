@@ -26,7 +26,7 @@ def extract_coordinates_from_url(url):
     return None, None
 
 # =====================================================================
-# 2. LOAD DATA AND EXECUTE EXTRACTION
+# 2. LOAD DATA AND EXECUTE EXTRACTION & CLEANING
 # =====================================================================
 # Load your exact Google Takeout CSV file
 csv_file_path = "/Users/prxrthxnx/Desktop/photobooth_project/photobooths - photobooths.csv"
@@ -34,8 +34,16 @@ df = pd.read_csv(csv_file_path)
 
 print(f"Processing {len(df)} rows from your CSV...")
 
-# Apply the extraction function across the URL column to create the new columns
+# Apply the coordinate extraction function across the URL column
 df['latitude'], df['longitude'] = zip(*df['URL'].apply(extract_coordinates_from_url))
+
+# --- NEW: EXTRACTION AND CLEANING OF DIGITAL/VINTAGE TAGS ---
+# 1. Pull from the 'Tags' column, strip extra whitespace, and capitalize it ('digital' -> 'Digital')
+df['Type'] = df['Tags'].str.strip().str.capitalize()
+
+# 2. Correct the spelling typo found in the raw dataset
+df['Type'] = df['Type'].replace({'Digial': 'Digital'})
+# -------------------------------------------------------------
 
 # Quick console check to verify what it found
 found_count = df['latitude'].notna().sum()
@@ -44,7 +52,6 @@ print(f"Extraction complete! Successfully parsed coordinates for {found_count}/{
 # =====================================================================
 # 3. SAVE DATA INTO MYSQL
 # =====================================================================
-# CRITICAL: Replace 'your_password' with your actual MySQL root password!
 engine = create_engine("mysql+pymysql://root:project26@127.0.0.1:3306/")
 
 # Ensure the project database exists on your server
@@ -57,4 +64,4 @@ data_engine = create_engine("mysql+pymysql://root:project26@127.0.0.1:3306/photo
 # Save the finalized DataFrame into a table named 'booths'
 df.to_sql(name="booths", con=data_engine, if_exists="replace", index=False)
 
-print("Success! Upgraded table 'booths' has been successfully loaded into MySQL.")
+print("Success! Upgraded table 'booths' (with Digital/Vintage types) has been loaded into MySQL.")
