@@ -88,7 +88,15 @@ if not closest_df.empty:
 
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
-        st.map(closest_df, latitude='latitude', longitude='longitude', size=20)
+        
+        # We added the 'color' parameter to map different styles to your types!
+        st.map(
+            closest_df, 
+            latitude='latitude', 
+            longitude='longitude', 
+            size=24,
+            color='Type' 
+        )
 
     with col2:
         st.subheader("🎯 Closest Matches")
