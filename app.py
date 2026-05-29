@@ -12,7 +12,7 @@ st.write("This app interface fetches its proximity data from a decoupled FastAPI
 # 1. Sidebar Layout for Location Input
 st.sidebar.header("📍 Your Location Settings")
 
-# --- NEW: DYNAMIC FILTER FETCH FROM API ---
+# --- DECOUPLED API FETCH LOGIC ---
 # Base API URL pointing to your live Render service
 BASE_API_URL = "https://photobooth-finder.onrender.com"
 
@@ -20,12 +20,11 @@ try:
     # Ask the API endpoint for all unique categories currently in the database
     types_response = requests.get(f"{BASE_API_URL}/api/types")
     if types_response.status_code == 200:
-        # Dynamically build choices: ["All", "Digital", "Vintage", ...]
         filter_options = ["All"] + types_response.json()
     else:
-        filter_options = ["All", "Digital", "Vintage"]  # Fallback options
+        filter_options = ["All", "Digital", "Vintage"]
 except requests.exceptions.ConnectionError:
-    filter_options = ["All", "Digital", "Vintage"]  # Fallback if API is sleeping
+    filter_options = ["All", "Digital", "Vintage"]
 
 # Render the radio buttons on the sidebar using the dynamic list
 booth_filter = st.sidebar.radio(
@@ -34,7 +33,6 @@ booth_filter = st.sidebar.radio(
     index=0
 )
 st.sidebar.write("---")
-# ------------------------------------------
 
 # Trigger the native browser location bridge automatically
 location_data = get_geolocation()
@@ -54,11 +52,9 @@ st.sidebar.write("Current Coordinates Active:")
 manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else 40.7128, format="%.6f")
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
-# --- DECOUPLED API FETCH LOGIC ---
 # Build our payload parameters dynamically
 api_params = {"lat": manual_lat, "lon": manual_lon}
 
-# Only send a booth_type filter to the API if the user selected something other than "All"
 if booth_filter != "All":
     api_params["booth_type"] = booth_filter
 
@@ -67,10 +63,22 @@ try:
     response = requests.get(f"{BASE_API_URL}/api/booths", params=api_params)
     
     if response.status_code == 200:
-        # Convert the incoming JSON data packet directly back into a clean Pandas DataFrame
         data_json = response.json()
         if data_json:
             closest_df = pd.DataFrame(data_json)
+            
+            # --- NEW CLEAN COLOR MAPPING FOR ST.MAP ---
+            # Create a dedicated hex color column that st.map can natively interpret
+            def assign_hex_color(row):
+                if row.get('Type') == "Vintage":
+                    return "#FF4B4B"  # Retro Red/Orange
+                elif row.get('Type') == "Digital":
+                    return "#0068C9"  # Clean Tech Blue
+                return "#808080"      # Gray fallback
+                
+            closest_df['pin_color'] = closest_df.apply(assign_hex_color, axis=1)
+            # ------------------------------------------
+            
         else:
             st.info(f"No {booth_filter} photobooths found matching this area.")
             closest_df = pd.DataFrame()
@@ -82,66 +90,32 @@ except requests.exceptions.ConnectionError:
     closest_df = pd.DataFrame()
 
 # =====================================================================
-# 2. SPLIT SCREEN LAYOUT: MAP ON THE LEFT, BEAUTIFIED CARDS ON THE RIGHT
+# 2. SPLIT SCREEN LAYOUT: ORIGINAL MAP + BEAUTIFIED CARDS
 # =====================================================================
 if not closest_df.empty:
-    col1, col2 = st.columns([1.8, 1.2])  # Slightly wider right column for cards
+    col1, col2 = st.columns([1.8, 1.2])
 
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # 1. Map your text categories to specific RGB color rows [Red, Green, Blue]
-        def assign_rgb_color(row):
-            if row.get('Type') == "Vintage":
-                return [255, 75, 75]   # Retro Red/Orange
-            elif row.get('Type') == "Digital":
-                return [0, 104, 201]   # Clean Tech Blue
-            return [128, 128, 128]     # Gray fallback if unclassified
-            
-        # Apply the color mapping directly to the data framework
-        closest_df['color'] = closest_df.apply(assign_rgb_color, axis=1)
-
-        # 2. Render using high-power Pydeck mapping layers
-        # Render using high-power Pydeck mapping layers
-        st.pydeck_chart(
-            pdk.Deck(
-                # CHANGED: Swapped mapbox link for a free, built-in light style
-                map_style="carto-positron", 
-                initial_view_state=pdk.ViewState(
-                    latitude=manual_lat,
-                    longitude=manual_lon,
-                    zoom=11,
-                    pitch=0,
-                ),
-                layers=[
-                    pdk.Layer(
-                        "ScatterplotLayer",
-                        data=closest_df,
-                        get_position="[longitude, latitude]",
-                        get_color="color",
-                        get_radius=250, # Radius size of pins in meters
-                        pickable=True,
-                    ),
-                ],
-            )
+        # Back to the stable, reliable original map layer, using our clean color string
+        st.map(
+            closest_df, 
+            latitude='latitude', 
+            longitude='longitude', 
+            size=22,
+            color='pin_color'
         )
 
     with col2:
         st.subheader("🎯 Closest Matches")
         
-        # Loop through the closest photobooths and render them as clean UI components
         for index, row in closest_df.iterrows():
-            # Wrap each booth in its own distinct visual border box
             with st.container(border=True):
-                
-                # Title Header
                 st.markdown(f"### 📍 {row['Title']}")
                 
-                # Nested row for Type Badge and Distance metrics
                 metric_col1, metric_col2 = st.columns([1, 1])
-                
                 with metric_col1:
-                    # Dynamically color-code the badges based on the type
                     booth_type = row.get('Type', 'Unclassified')
                     if booth_type == "Vintage":
                         st.markdown("🎞️ **Type:** :orange[Vintage]")
@@ -153,11 +127,7 @@ if not closest_df.empty:
                 with metric_col2:
                     st.markdown(f"🏃‍♂️ **Distance:** `{row['distance_miles']:.2f} miles`")
                 
-                # Add a clean space spacing element
                 st.write("")
-                
-                # Native, clickable, full-width button to view directions
-                # Giving it a unique key per row prevents Streamlit state errors
                 st.link_button(
                     "🗺️ View on Google Maps", 
                     url=row['URL'], 
