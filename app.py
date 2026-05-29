@@ -102,7 +102,7 @@ if not closest_df.empty:
         closest_df['color'] = closest_df.apply(assign_rgb_color, axis=1)
 
         # 2. Render using high-power Pydeck mapping layers
-        s# Render using high-power Pydeck mapping layers
+        # Render using high-power Pydeck mapping layers
         st.pydeck_chart(
             pdk.Deck(
                 # CHANGED: Swapped mapbox link for a free, built-in light style
