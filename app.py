@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import requests  # Standard library to send HTTP requests over the internet
+import requests
+import pydeck as pdk # Add this line to your imports at the top!
 from streamlit_js_eval import get_geolocation
 
 # Set up the web page title
@@ -89,13 +90,38 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # We added the 'color' parameter to map different styles to your types!
-        st.map(
-            closest_df, 
-            latitude='latitude', 
-            longitude='longitude', 
-            size=24,
-            color='Type' 
+        # 1. Map your text categories to specific RGB color rows [Red, Green, Blue]
+        def assign_rgb_color(row):
+            if row.get('Type') == "Vintage":
+                return [255, 75, 75]   # Retro Red/Orange
+            elif row.get('Type') == "Digital":
+                return [0, 104, 201]   # Clean Tech Blue
+            return [128, 128, 128]     # Gray fallback if unclassified
+            
+        # Apply the color mapping directly to the data framework
+        closest_df['color'] = closest_df.apply(assign_rgb_color, axis=1)
+
+        # 2. Render using high-power Pydeck mapping layers
+        st.pydeck_chart(
+            pdk.Deck(
+                map_style="mapbox://styles/mapbox/light-v10", # Crisp, premium map theme
+                initial_view_state=pdk.ViewState(
+                    latitude=manual_lat,
+                    longitude=manual_lon,
+                    zoom=11,
+                    pitch=0,
+                ),
+                layers=[
+                    pdk.Layer(
+                        "ScatterplotLayer",
+                        data=closest_df,
+                        get_position="[longitude, latitude]",
+                        get_color="color",
+                        get_radius=250, # Radius size of pins in meters
+                        pickable=True,
+                    ),
+                ],
+            )
         )
 
     with col2:
