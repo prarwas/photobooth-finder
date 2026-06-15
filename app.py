@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from geopy.distance import geodesic
+from geopy.geocoders import Nominatim
 from streamlit_js_eval import get_geolocation
 
 # Set up the web page title
@@ -23,7 +24,7 @@ def load_data():
 df = load_data()
 
 # =====================================================================
-# 2. SIDEBAR LAYOUT & DYNAMIC FILTERS
+# 2. SIDEBAR LAYOUT & ADDRESS SELECTION
 # =====================================================================
 st.sidebar.header("📍 Your Location Settings")
 
@@ -51,10 +52,36 @@ if location_data and 'coords' in location_data:
 else:
     st.sidebar.info("Waiting for browser location access...")
 
-# Fallback text inputs so the app doesn't crash while waiting for GPS coordinates
-st.sidebar.write("Current Coordinates Active:")
-manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else 40.7128, format="%.6f")
-manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
+# --- NEW: SWAPPED NUMBER INPUTS FOR A TEXT ADDRESS BAR ---
+st.sidebar.write("Or enter a custom address/neighborhood:")
+default_address = "Queens, New York" if not user_lat else f"{user_lat}, {user_lon}"
+address_input = st.sidebar.text_input("Enter Address:", value=default_address)
+
+# Initialize the geocoding service tool
+geolocator = Nominatim(user_agent="nearme_photobooth_finder")
+
+# Behind-the-scenes conversion logic
+manual_lat, manual_lon = 40.7128, -74.0060  # Default to NYC fallback if lookup fails
+
+if address_input:
+    try:
+        # Check if the user is using the browser's raw coordinate string fallback
+        if "," in address_input and any(char.isdigit() for char in address_input):
+            lat_str, lon_str = address_input.split(",")
+            manual_lat = float(lat_str.strip())
+            manual_lon = float(lon_str.strip())
+        else:
+            # Look up the text string across global maps
+            location = geolocator.geocode(address_input)
+            if location:
+                manual_lat = location.latitude
+                manual_lon = location.longitude
+            else:
+                st.sidebar.error("Address not found. Using fallback coordinates.")
+    except Exception:
+        # Safe fallback if network timeout happens
+        if user_lat and user_lon:
+            manual_lat, manual_lon = user_lat, user_lon
 
 # =====================================================================
 # 3. IN-MEMORY GEOSPATIAL ENGINE (WITH "YOU ARE HERE" PIN)
@@ -74,7 +101,7 @@ if not filtered_df.empty:
         axis=1
     )
     
-    # 2. Sort the entire dataset so the closest rows are sequentially at the top
+    # 2. Sort the entire dataframe so the closest rows are sequentially at the top
     filtered_df = filtered_df.sort_values(by='distance_miles')
     
     # 3. Separate out the absolute Top 5 Closest matches for our side cards
@@ -87,26 +114,24 @@ if not filtered_df.empty:
     def assign_hex_color(row):
         is_top_5 = row['Title'] in closest_df['Title'].values
         if row.get('Type') == "Vintage":
-            return "#FF4B4B" if is_top_5 else "#FFB3B3"  # Solid Red vs Soft Pink
+            return "#FF4B4B" if is_top_5 else "#FFB3B3"
         elif row.get('Type') == "Digital":
-            return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Blue
-        return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
+            return "#0068C9" if is_top_5 else "#B3D1FF"
+        return "#808080" if is_top_5 else "#D3D3D3"
         
     map_df['pin_color'] = map_df.apply(assign_hex_color, axis=1)
 
-    # 6. --- CREATE THE "YOU ARE HERE" PIN ---
+    # 6. Create the "YOU ARE HERE" pin right at the resolved address location
     user_pin = pd.DataFrame([{
         'Title': "⭐ YOU ARE HERE",
         'latitude': manual_lat,
         'longitude': manual_lon,
         'Type': "User",
-        'pin_color': "#000000", # Pure jet black marker so it stands out immediately
+        'pin_color': "#000000",
         'distance_miles': 0.0
     }])
     
-    # Merge the user pin directly on top of the map dataset layout
     map_df = pd.concat([user_pin, map_df], ignore_index=True)
-    # -----------------------------------------
 else:
     closest_df = pd.DataFrame()
     map_df = pd.DataFrame()
