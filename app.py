@@ -57,7 +57,7 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL ENGINE (HYBRID ALL-PINS DATA + MATCH FOCUS)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (STABLE SORT-BASED INITIAL FOCUS)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
@@ -74,10 +74,14 @@ if not filtered_df.empty:
         axis=1
     )
     
-    # 2. Grab the Top 5 Closest matches
-    closest_df = filtered_df.sort_values(by='distance_miles').head(5)
+    # 2. Sort the entire dataframe by distance so closest rows are at the top.
+    # This naturally guides st.map's default camera view to focus on them first!
+    filtered_df = filtered_df.sort_values(by='distance_miles')
     
-    # 3. Assign colors to the ENTIRE dataset (Solid for top 5, Pastel for the rest)
+    # 3. Snag the Top 5 Closest matches for our side cards
+    closest_df = filtered_df.head(5)
+    
+    # 4. Assign colors (Solid for the top 5 rows, Pastel for the background rows)
     def assign_hex_color(row):
         is_top_5 = row['Title'] in closest_df['Title'].values
         if row.get('Type') == "Vintage":
@@ -92,7 +96,7 @@ else:
     filtered_df = pd.DataFrame()
 
 # =====================================================================
-# 4. SPLIT SCREEN LAYOUT: CAMERA-BOUNDED MAP + MATCH CARDS
+# 4. SPLIT SCREEN LAYOUT: ERROR-FREE MAP + MATCH CARDS
 # =====================================================================
 if not closest_df.empty:
     col1, col2 = st.columns([1.8, 1.2])
@@ -100,16 +104,13 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # EXCELLENT HYBRID FIX: 
-        # We pass the full filtered_df so ALL pins exist when scrolling around,
-        # but we use selection=closest_df to force the initial view to frame the top 5!
+        # Pure, reliable st.map containing all rows, naturally centered by the top rows
         st.map(
             filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=22,
-            color='pin_color',
-            selection=closest_df
+            color='pin_color'
         )
 
     with col2:
