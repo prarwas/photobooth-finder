@@ -57,7 +57,7 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL ENGINE (LOCALIZED neighborhood FOCUS)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (HYBRID ALL-PINS DATA + MATCH FOCUS)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
@@ -68,7 +68,7 @@ else:
     filtered_df = df.copy()
 
 if not filtered_df.empty:
-    # 1. Calculate distances for everything
+    # 1. Calculate distances for EVERYTHING in the dataset
     filtered_df['distance_miles'] = filtered_df.apply(
         lambda row: geodesic(user_location, (row['latitude'], row['longitude'])).miles, 
         axis=1
@@ -77,20 +77,7 @@ if not filtered_df.empty:
     # 2. Grab the Top 5 Closest matches
     closest_df = filtered_df.sort_values(by='distance_miles').head(5)
     
-    # 3. Dynamic Framing: Find the coordinate bounds of the top 5 matches
-    pad = 0.03  # Padding factor to give the map camera a little breathing room
-    max_lat = closest_df['latitude'].max() + pad
-    min_lat = closest_df['latitude'].min() - pad
-    max_lon = closest_df['longitude'].max() + pad
-    min_lon = closest_df['longitude'].min() - pad
-    
-    # 4. Filter map data to only show pins inside this local neighborhood frame
-    map_display_df = filtered_df[
-        (filtered_df['latitude'] >= min_lat) & (filtered_df['latitude'] <= max_lat) &
-        (filtered_df['longitude'] >= min_lon) & (filtered_df['longitude'] <= max_lon)
-    ].copy()
-    
-    # 5. Assign high-contrast colors to differentiate top 5 from neighborhood background
+    # 3. Assign colors to the ENTIRE dataset (Solid for top 5, Pastel for the rest)
     def assign_hex_color(row):
         is_top_5 = row['Title'] in closest_df['Title'].values
         if row.get('Type') == "Vintage":
@@ -99,13 +86,13 @@ if not filtered_df.empty:
             return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Blue
         return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
         
-    map_display_df['pin_color'] = map_display_df.apply(assign_hex_color, axis=1)
+    filtered_df['pin_color'] = filtered_df.apply(assign_hex_color, axis=1)
 else:
     closest_df = pd.DataFrame()
-    map_display_df = pd.DataFrame()
+    filtered_df = pd.DataFrame()
 
 # =====================================================================
-# 4. SPLIT SCREEN LAYOUT: FOCUSED NEIGHBORHOOD MAP + MATCH CARDS
+# 4. SPLIT SCREEN LAYOUT: CAMERA-BOUNDED MAP + MATCH CARDS
 # =====================================================================
 if not closest_df.empty:
     col1, col2 = st.columns([1.8, 1.2])
@@ -113,13 +100,16 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # Displays the locally padded frame safely using the classic st.map structure
+        # EXCELLENT HYBRID FIX: 
+        # We pass the full filtered_df so ALL pins exist when scrolling around,
+        # but we use selection=closest_df to force the initial view to frame the top 5!
         st.map(
-            map_display_df, 
+            filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=22,
-            color='pin_color'
+            color='pin_color',
+            selection=closest_df
         )
 
     with col2:
