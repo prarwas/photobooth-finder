@@ -102,15 +102,16 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # FIXED: Added explicit center coordinates so zoom doesn't default to Africa!
+        # FIXED: Using the correct, official parameters to anchor the map viewpoint
         st.map(
             filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=18,
             color='pin_color',
-            zoom=12,                        # Sets initial zoom depth
-            center=[manual_lat, manual_lon] # Locks camera viewpoint to active location
+            zoom=12,                           # Sets initial zoom depth
+            initial_latitude=manual_lat,       # Anchors camera center latitude
+            initial_longitude=manual_lon       # Anchors camera center longitude
         )
 
     with col2:
