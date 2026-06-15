@@ -1,32 +1,36 @@
 import streamlit as st
 import pandas as pd
-import requests
-import pydeck as pdk # Add this line to your imports at the top!
+from geopy.distance import geodesic
 from streamlit_js_eval import get_geolocation
 
 # Set up the web page title
 st.set_page_config(page_title="Photobooth Finder", layout="wide")
-st.title("📸 NearMe Photobooth Finder (API-Driven)")
-st.write("This app interface fetches its proximity data from a decoupled FastAPI microservice.")
+st.title("📸 NearMe Photobooth Finder")
+st.write("This app runs entirely in-memory for instant calculations and 24/7 availability.")
 
-# 1. Sidebar Layout for Location Input
+# =====================================================================
+# 1. DATA LAYER (LOAD LOCAL CSV DIRECTLY)
+# =====================================================================
+@st.cache_data
+def load_data():
+    # Streamlit loads the file directly from your GitHub repo or local folder
+    df = pd.read_csv("clean_booths.csv")
+    # Clean coordinate types immediately to guarantee rendering safety
+    df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+    df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+    return df.dropna(subset=['latitude', 'longitude'])
+
+df = load_data()
+
+# =====================================================================
+# 2. SIDEBAR LAYOUT & DYNAMIC FILTERS
+# =====================================================================
 st.sidebar.header("📍 Your Location Settings")
 
-# --- DECOUPLED API FETCH LOGIC ---
-# Base API URL pointing to your live Render service
-BASE_API_URL = "https://photobooth-finder.onrender.com"
+# Dynamically calculate the filter options based on the dataset tags
+unique_types = sorted(df['Type'].dropna().unique().tolist())
+filter_options = ["All"] + unique_types
 
-try:
-    # Ask the API endpoint for all unique categories currently in the database
-    types_response = requests.get(f"{BASE_API_URL}/api/types")
-    if types_response.status_code == 200:
-        filter_options = ["All"] + types_response.json()
-    else:
-        filter_options = ["All", "Digital", "Vintage"]
-except requests.exceptions.ConnectionError:
-    filter_options = ["All", "Digital", "Vintage"]
-
-# Render the radio buttons on the sidebar using the dynamic list
 booth_filter = st.sidebar.radio(
     "🎞️ Select Photobooth Type:",
     options=filter_options,
@@ -52,53 +56,47 @@ st.sidebar.write("Current Coordinates Active:")
 manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else 40.7128, format="%.6f")
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
-# Build our payload parameters dynamically
-api_params = {"lat": manual_lat, "lon": manual_lon}
+# =====================================================================
+# 3. IN-MEMORY GEOSPATIAL FILTER ENGINE (REPLACED FASTAPI)
+# =====================================================================
+user_location = (manual_lat, manual_lon)
 
+# Apply category filtering
 if booth_filter != "All":
-    api_params["booth_type"] = booth_filter
+    filtered_df = df[df['Type'] == booth_filter].copy()
+else:
+    filtered_df = df.copy()
 
-# Shoot the coordinates and filters across the network to your API
-try:
-    response = requests.get(f"{BASE_API_URL}/api/booths", params=api_params)
+if not filtered_df.empty:
+    # Crunch the geodesic mileage math instantly on the fly
+    filtered_df['distance_miles'] = filtered_df.apply(
+        lambda row: geodesic(user_location, (row['latitude'], row['longitude'])).miles, 
+        axis=1
+    )
     
-    if response.status_code == 200:
-        data_json = response.json()
-        if data_json:
-            closest_df = pd.DataFrame(data_json)
-            
-            # --- NEW CLEAN COLOR MAPPING FOR ST.MAP ---
-            # Create a dedicated hex color column that st.map can natively interpret
-            def assign_hex_color(row):
-                if row.get('Type') == "Vintage":
-                    return "#FF4B4B"  # Retro Red/Orange
-                elif row.get('Type') == "Digital":
-                    return "#0068C9"  # Clean Tech Blue
-                return "#808080"      # Gray fallback
-                
-            closest_df['pin_color'] = closest_df.apply(assign_hex_color, axis=1)
-            # ------------------------------------------
-            
-        else:
-            st.info(f"No {booth_filter} photobooths found matching this area.")
-            closest_df = pd.DataFrame()
-    else:
-        st.error("Failed to fetch data from the API engine.")
-        closest_df = pd.DataFrame()
-except requests.exceptions.ConnectionError:
-    st.error("Could not connect to the API server. Make sure your Render web service is awake!")
+    # Sort and grab the top 5 closest matches
+    closest_df = filtered_df.sort_values(by='distance_miles').head(5)
+    
+    # Map colors cleanly
+    def assign_hex_color(row):
+        if row.get('Type') == "Vintage":
+            return "#FF4B4B"  # Retro Red/Orange
+        elif row.get('Type') == "Digital":
+            return "#0068C9"  # Clean Tech Blue
+        return "#808080"      # Gray fallback
+        
+    closest_df['pin_color'] = closest_df.apply(assign_hex_color, axis=1)
+else:
     closest_df = pd.DataFrame()
 
 # =====================================================================
-# 2. SPLIT SCREEN LAYOUT: ORIGINAL MAP + BEAUTIFIED CARDS
+# 4. SPLIT SCREEN LAYOUT: MAP & BEAUTIFIED CARDS
 # =====================================================================
 if not closest_df.empty:
     col1, col2 = st.columns([1.8, 1.2])
 
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
-        
-        # Back to the stable, reliable original map layer, using our clean color string
         st.map(
             closest_df, 
             latitude='latitude', 
@@ -133,3 +131,5 @@ if not closest_df.empty:
                     url=row['URL'], 
                     use_container_width=True
                 )
+else:
+    st.info(f"No {booth_filter} photobooths found matching this area.")
