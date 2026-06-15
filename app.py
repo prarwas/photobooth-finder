@@ -57,7 +57,7 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL ENGINE (TOP 5 MATCHES + 15 BACKGROUND SPOTS)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (WITH "YOU ARE HERE" PIN)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
@@ -78,10 +78,9 @@ if not filtered_df.empty:
     filtered_df = filtered_df.sort_values(by='distance_miles')
     
     # 3. Separate out the absolute Top 5 Closest matches for our side cards
-    closest_df = filtered_df.head(5)
+    closest_df = filtered_df.head(5).copy()
     
-    # 4. FIX: Take the Top 5 CLOSEST + the next 15 spots (20 total locations)
-    # This keeps the map localized so it stays focused, but adds extra spots!
+    # 4. Take the Top 5 CLOSEST + the next 15 spots (20 total locations) for background map space
     map_df = filtered_df.head(20).copy()
     
     # 5. Assign colors (Solid for the top 5 cards, Pastel for the 15 background spots)
@@ -94,6 +93,20 @@ if not filtered_df.empty:
         return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
         
     map_df['pin_color'] = map_df.apply(assign_hex_color, axis=1)
+
+    # 6. --- CREATE THE "YOU ARE HERE" PIN ---
+    user_pin = pd.DataFrame([{
+        'Title': "⭐ YOU ARE HERE",
+        'latitude': manual_lat,
+        'longitude': manual_lon,
+        'Type': "User",
+        'pin_color': "#000000", # Pure jet black marker so it stands out immediately
+        'distance_miles': 0.0
+    }])
+    
+    # Merge the user pin directly on top of the map dataset layout
+    map_df = pd.concat([user_pin, map_df], ignore_index=True)
+    # -----------------------------------------
 else:
     closest_df = pd.DataFrame()
     map_df = pd.DataFrame()
