@@ -102,14 +102,15 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # FIXED: Added the zoom parameter to force an initial city-level view
+        # FIXED: Added explicit center coordinates so zoom doesn't default to Africa!
         st.map(
             filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=18,
             color='pin_color',
-            zoom=12  # 12 is a perfect city-level zoom. Higher numbers zoom closer!
+            zoom=12,                        # Sets initial zoom depth
+            center=[manual_lat, manual_lon] # Locks camera viewpoint to active location
         )
 
     with col2:
