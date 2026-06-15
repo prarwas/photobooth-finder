@@ -57,57 +57,64 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL FILTER ENGINE (REPLACED FASTAPI)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (ALL PINS ON MAP, TOP 5 ON THE SIDE)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
-# Apply category filtering
+# Apply category filtering first
 if booth_filter != "All":
     filtered_df = df[df['Type'] == booth_filter].copy()
 else:
     filtered_df = df.copy()
 
 if not filtered_df.empty:
-    # Crunch the geodesic mileage math instantly on the fly
+    # 1. Calculate distances for EVERYTHING in the filtered dataset
     filtered_df['distance_miles'] = filtered_df.apply(
         lambda row: geodesic(user_location, (row['latitude'], row['longitude'])).miles, 
         axis=1
     )
     
-    # Sort and grab the top 5 closest matches
+    # 2. Separate into the Top 5 Closest vs the rest of the locations
     closest_df = filtered_df.sort_values(by='distance_miles').head(5)
     
-    # Map colors cleanly
+    # 3. Create a color column for the ENTIRE dataset so they all show on the map
     def assign_hex_color(row):
-        if row.get('Type') == "Vintage":
-            return "#FF4B4B"  # Retro Red/Orange
-        elif row.get('Type') == "Digital":
-            return "#0068C9"  # Clean Tech Blue
-        return "#808080"      # Gray fallback
+        # Is this row one of our top 5 closest matches?
+        is_top_5 = row['Title'] in closest_df['Title'].values
         
-    closest_df['pin_color'] = closest_df.apply(assign_hex_color, axis=1)
+        if row.get('Type') == "Vintage":
+            return "#FF4B4B" if is_top_5 else "#FFB3B3"  # Solid Red vs Soft Pink
+        elif row.get('Type') == "Digital":
+            return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Pastel Blue
+        return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
+        
+    filtered_df['pin_color'] = filtered_df.apply(assign_hex_color, axis=1)
 else:
     closest_df = pd.DataFrame()
+    filtered_df = pd.DataFrame()
 
 # =====================================================================
-# 4. SPLIT SCREEN LAYOUT: MAP & BEAUTIFIED CARDS
+# 4. SPLIT SCREEN LAYOUT: ALL MAP PINS & 5 CARD MATCHES
 # =====================================================================
 if not closest_df.empty:
     col1, col2 = st.columns([1.8, 1.2])
 
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
+        
+        # CHANGED: We feed the map filtered_df (EVERYTHING) instead of closest_df
         st.map(
-            closest_df, 
+            filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
-            size=22,
+            size=18,
             color='pin_color'
         )
 
     with col2:
         st.subheader("🎯 Closest Matches")
         
+        # KEEPING: Only loop through closest_df (TOP 5) for the card UI
         for index, row in closest_df.iterrows():
             with st.container(border=True):
                 st.markdown(f"### 📍 {row['Title']}")
