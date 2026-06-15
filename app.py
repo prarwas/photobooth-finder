@@ -102,13 +102,14 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # CHANGED: We feed the map filtered_df (EVERYTHING) instead of closest_df
+        # FIXED: Added the zoom parameter to force an initial city-level view
         st.map(
             filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=18,
-            color='pin_color'
+            color='pin_color',
+            zoom=12  # 12 is a perfect city-level zoom. Higher numbers zoom closer!
         )
 
     with col2:
