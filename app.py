@@ -57,7 +57,7 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL ENGINE (STABLE SORT-BASED INITIAL FOCUS)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (RADIUS-BOUNDED AUTOFOCUS)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
@@ -74,14 +74,18 @@ if not filtered_df.empty:
         axis=1
     )
     
-    # 2. Sort the entire dataframe by distance so closest rows are at the top.
-    # This naturally guides st.map's default camera view to focus on them first!
+    # 2. Sort everything by closest distance
     filtered_df = filtered_df.sort_values(by='distance_miles')
     
-    # 3. Snag the Top 5 Closest matches for our side cards
+    # 3. Grab the Top 5 Closest matches for our side cards
     closest_df = filtered_df.head(5)
     
-    # 4. Assign colors (Solid for the top 5 rows, Pastel for the background rows)
+    # 4. CRITICAL FIX: Only pass locations within a 50-mile radius to the map!
+    # This prevents global data (like Europe/California) from pulling the camera out.
+    # You can change 50 to 100 or 200 if you want to see spots a bit further away!
+    map_df = filtered_df[filtered_df['distance_miles'] <= 50].copy()
+    
+    # 5. Assign colors (Solid for the top 5 rows, Pastel for the surrounding ones)
     def assign_hex_color(row):
         is_top_5 = row['Title'] in closest_df['Title'].values
         if row.get('Type') == "Vintage":
@@ -90,10 +94,10 @@ if not filtered_df.empty:
             return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Blue
         return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
         
-    filtered_df['pin_color'] = filtered_df.apply(assign_hex_color, axis=1)
+    map_df['pin_color'] = map_df.apply(assign_hex_color, axis=1)
 else:
     closest_df = pd.DataFrame()
-    filtered_df = pd.DataFrame()
+    map_df = pd.DataFrame()
 
 # =====================================================================
 # 4. SPLIT SCREEN LAYOUT: ERROR-FREE MAP + MATCH CARDS
@@ -104,9 +108,9 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # Pure, reliable st.map containing all rows, naturally centered by the top rows
+        # CHANGED: Feed it map_df instead of filtered_df
         st.map(
-            filtered_df, 
+            map_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=22,
