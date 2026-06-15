@@ -24,7 +24,7 @@ def load_data():
 df = load_data()
 
 # =====================================================================
-# 2. SIDEBAR LAYOUT & ADDRESS SELECTION
+# 2. SIDEBAR LAYOUT & ADDRESS SELECTION WITH RESET BUTTON
 # =====================================================================
 st.sidebar.header("📍 Your Location Settings")
 
@@ -52,26 +52,43 @@ if location_data and 'coords' in location_data:
 else:
     st.sidebar.info("Waiting for browser location access...")
 
-# --- NEW: SWAPPED NUMBER INPUTS FOR A TEXT ADDRESS BAR ---
 st.sidebar.write("Or enter a custom address/neighborhood:")
-default_address = "Queens, New York" if not user_lat else f"{user_lat}, {user_lon}"
-address_input = st.sidebar.text_input("Enter Address:", value=default_address)
 
-# Initialize the geocoding service tool
+# 1. --- NEW RESET BUTTON LOGIC ---
+# Create a session state key to keep track of whether the user wants a hard reset
+if "reset_clicked" not in st.session_state:
+    st.session_state.reset_clicked = False
+
+# Render the layout components
+address_input = st.sidebar.text_input(
+    "Enter Address:", 
+    value="Queens, New York" if not user_lat else f"{user_lat}, {user_lon}",
+    key="address_bar"
+)
+
+# Render a clean button underneath the input field
+if st.sidebar.button("🔄 Reset to Nearest Me", use_container_width=True):
+    st.session_state.reset_clicked = True
+    # Force a rerun to instantly clear out custom overrides
+    st.rerun()
+
+# 2. Resolve final coordinates based on button state vs text bar input
 geolocator = Nominatim(user_agent="nearme_photobooth_finder")
+manual_lat, manual_lon = 40.7128, -74.0060  # NYC default fallback
 
-# Behind-the-scenes conversion logic
-manual_lat, manual_lon = 40.7128, -74.0060  # Default to NYC fallback if lookup fails
-
-if address_input:
+# If reset was clicked, bypass the custom text input completely and fetch browser location
+if st.session_state.reset_clicked and user_lat and user_lon:
+    manual_lat = user_lat
+    manual_lon = user_lon
+    # Reset our state tracker flag for the next layout iteration
+    st.session_state.reset_clicked = False
+elif address_input:
     try:
-        # Check if the user is using the browser's raw coordinate string fallback
         if "," in address_input and any(char.isdigit() for char in address_input):
             lat_str, lon_str = address_input.split(",")
             manual_lat = float(lat_str.strip())
             manual_lon = float(lon_str.strip())
         else:
-            # Look up the text string across global maps
             location = geolocator.geocode(address_input)
             if location:
                 manual_lat = location.latitude
@@ -79,7 +96,6 @@ if address_input:
             else:
                 st.sidebar.error("Address not found. Using fallback coordinates.")
     except Exception:
-        # Safe fallback if network timeout happens
         if user_lat and user_lon:
             manual_lat, manual_lon = user_lat, user_lon
 
