@@ -57,7 +57,7 @@ manual_lat = st.sidebar.number_input("Latitude", value=user_lat if user_lat else
 manual_lon = st.sidebar.number_input("Longitude", value=user_lon if user_lon else -74.0060, format="%.6f")
 
 # =====================================================================
-# 3. IN-MEMORY GEOSPATIAL ENGINE (ALL PINS ON MAP, TOP 5 ON THE SIDE)
+# 3. IN-MEMORY GEOSPATIAL ENGINE (LOCALIZED neighborhood FOCUS)
 # =====================================================================
 user_location = (manual_lat, manual_lon)
 
@@ -68,33 +68,44 @@ else:
     filtered_df = df.copy()
 
 if not filtered_df.empty:
-    # 1. Calculate distances for EVERYTHING in the filtered dataset
+    # 1. Calculate distances for everything
     filtered_df['distance_miles'] = filtered_df.apply(
         lambda row: geodesic(user_location, (row['latitude'], row['longitude'])).miles, 
         axis=1
     )
     
-    # 2. Separate into the Top 5 Closest vs the rest of the locations
+    # 2. Grab the Top 5 Closest matches
     closest_df = filtered_df.sort_values(by='distance_miles').head(5)
     
-    # 3. Create a color column for the ENTIRE dataset so they all show on the map
+    # 3. Dynamic Framing: Find the coordinate bounds of the top 5 matches
+    pad = 0.03  # Padding factor to give the map camera a little breathing room
+    max_lat = closest_df['latitude'].max() + pad
+    min_lat = closest_df['latitude'].min() - pad
+    max_lon = closest_df['longitude'].max() + pad
+    min_lon = closest_df['longitude'].min() - pad
+    
+    # 4. Filter map data to only show pins inside this local neighborhood frame
+    map_display_df = filtered_df[
+        (filtered_df['latitude'] >= min_lat) & (filtered_df['latitude'] <= max_lat) &
+        (filtered_df['longitude'] >= min_lon) & (filtered_df['longitude'] <= max_lon)
+    ].copy()
+    
+    # 5. Assign high-contrast colors to differentiate top 5 from neighborhood background
     def assign_hex_color(row):
-        # Is this row one of our top 5 closest matches?
         is_top_5 = row['Title'] in closest_df['Title'].values
-        
         if row.get('Type') == "Vintage":
             return "#FF4B4B" if is_top_5 else "#FFB3B3"  # Solid Red vs Soft Pink
         elif row.get('Type') == "Digital":
-            return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Pastel Blue
+            return "#0068C9" if is_top_5 else "#B3D1FF"  # Solid Blue vs Soft Blue
         return "#808080" if is_top_5 else "#D3D3D3"      # Dark Gray vs Light Gray
         
-    filtered_df['pin_color'] = filtered_df.apply(assign_hex_color, axis=1)
+    map_display_df['pin_color'] = map_display_df.apply(assign_hex_color, axis=1)
 else:
     closest_df = pd.DataFrame()
-    filtered_df = pd.DataFrame()
+    map_display_df = pd.DataFrame()
 
 # =====================================================================
-# 4. SPLIT SCREEN LAYOUT: ALL MAP PINS & 5 CARD MATCHES
+# 4. SPLIT SCREEN LAYOUT: FOCUSED NEIGHBORHOOD MAP + MATCH CARDS
 # =====================================================================
 if not closest_df.empty:
     col1, col2 = st.columns([1.8, 1.2])
@@ -102,10 +113,9 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # Back to the original, bulletproof setup that worked perfectly!
-        # Feeding filtered_df ensures ALL spots load onto the canvas automatically.
+        # Displays the locally padded frame safely using the classic st.map structure
         st.map(
-            filtered_df, 
+            map_display_df, 
             latitude='latitude', 
             longitude='longitude', 
             size=22,
@@ -115,7 +125,6 @@ if not closest_df.empty:
     with col2:
         st.subheader("🎯 Closest Matches")
         
-        # KEEPING: Only loop through closest_df (TOP 5) for the card UI
         for index, row in closest_df.iterrows():
             with st.container(border=True):
                 st.markdown(f"### 📍 {row['Title']}")
