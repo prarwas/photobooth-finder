@@ -102,16 +102,14 @@ if not closest_df.empty:
     with col1:
         st.subheader("🗺️ Interactive Proximity Map")
         
-        # FIXED: Using the correct, official parameters to anchor the map viewpoint
+        # Back to the original, bulletproof setup that worked perfectly!
+        # Feeding filtered_df ensures ALL spots load onto the canvas automatically.
         st.map(
             filtered_df, 
             latitude='latitude', 
             longitude='longitude', 
-            size=18,
-            color='pin_color',
-            zoom=12,                           # Sets initial zoom depth
-            initial_latitude=manual_lat,       # Anchors camera center latitude
-            initial_longitude=manual_lon       # Anchors camera center longitude
+            size=22,
+            color='pin_color'
         )
 
     with col2:
