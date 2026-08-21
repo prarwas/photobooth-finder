@@ -5,3 +5,6 @@ streamlit-js-eval
 fastapi
 uvicorn
 requests
+sqlalchemy
+pymysql
+python-dotenv

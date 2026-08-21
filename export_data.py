@@ -1,13 +1,35 @@
+import os
+
 import pandas as pd
-from sqlalchemy import create_engine
+from dotenv import load_dotenv
+from sqlalchemy import URL, create_engine
 
-# Connect to your local MySQL database
-engine = create_engine("mysql+pymysql://root:REDACTED@127.0.0.1:3306/photobooth_project")
+load_dotenv()
 
-# Pull the entire table into a DataFrame, now including the clean Type column!
-df = pd.read_sql("SELECT Title, URL, latitude, longitude, Type FROM booths WHERE latitude IS NOT NULL", engine)
+database_url = URL.create(
+    "mysql+pymysql",
+    username=os.getenv("MYSQL_USER"),
+    password=os.getenv("MYSQL_PASSWORD"),
+    host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+    port=int(os.getenv("MYSQL_PORT", "3306")),
+    database=os.getenv("MYSQL_DATABASE", "photobooth_project"),
+)
 
-# Overwrite your deployment file with the fresh dataset
+engine = create_engine(database_url)
+
+df = pd.read_sql(
+    """
+    SELECT Title, URL, latitude, longitude, Type
+    FROM booths
+    WHERE latitude IS NOT NULL
+      AND longitude IS NOT NULL
+    """,
+    engine,
+)
+
 df.to_csv("clean_booths.csv", index=False)
 
-print(f"Success! Exported {len(df)} rows with Digital/Vintage labels into clean_booths.csv")
+print(
+    f"Success! Exported {len(df)} valid photobooth locations "
+    "to clean_booths.csv"
+)

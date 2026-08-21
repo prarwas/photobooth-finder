@@ -1,6 +1,12 @@
-import pandas as pd
+import os
 import re
-from sqlalchemy import create_engine, text
+from pathlib import Path
+
+import pandas as pd
+from dotenv import load_dotenv
+from sqlalchemy import URL, create_engine, text
+
+load_dotenv()
 
 # =====================================================================
 # 1. CORE COORDINATE EXTRACTION LOGIC
@@ -29,7 +35,7 @@ def extract_coordinates_from_url(url):
 # 2. LOAD DATA AND EXECUTE EXTRACTION & CLEANING
 # =====================================================================
 # Load your exact Google Takeout CSV file
-csv_file_path = "/Users/localuser/Desktop/photobooth_project/photobooths - photobooths.csv"
+csv_file_path = Path(__file__).resolve().parent / "photobooths - photobooths.csv"
 df = pd.read_csv(csv_file_path)
 
 print(f"Processing {len(df)} rows from your CSV...")
@@ -52,16 +58,43 @@ print(f"Extraction complete! Successfully parsed coordinates for {found_count}/{
 # =====================================================================
 # 3. SAVE DATA INTO MYSQL
 # =====================================================================
-engine = create_engine("mysql+pymysql://root:REDACTED@127.0.0.1:3306/")
+db_user = os.getenv("MYSQL_USER")
+db_password = os.getenv("MYSQL_PASSWORD")
+db_host = os.getenv("MYSQL_HOST", "127.0.0.1")
+db_port = int(os.getenv("MYSQL_PORT", "3306"))
+db_name = os.getenv("MYSQL_DATABASE", "photobooth_project")
 
-# Ensure the project database exists on your server
+server_url = URL.create(
+    "mysql+pymysql",
+    username=db_user,
+    password=db_password,
+    host=db_host,
+    port=db_port,
+)
+
+database_url = URL.create(
+    "mysql+pymysql",
+    username=db_user,
+    password=db_password,
+    host=db_host,
+    port=db_port,
+    database=db_name,
+)
+
+engine = create_engine(server_url)
+
 with engine.connect() as conn:
-    conn.execute(text("CREATE DATABASE IF NOT EXISTS photobooth_project;"))
+    conn.execute(
+        text(f"CREATE DATABASE IF NOT EXISTS `{db_name}`;")
+    )
 
-# Connect directly to the photobooth_project database
-data_engine = create_engine("mysql+pymysql://root:REDACTED@127.0.0.1:3306/photobooth_project")
+data_engine = create_engine(database_url)
 
-# Save the finalized DataFrame into a table named 'booths'
-df.to_sql(name="booths", con=data_engine, if_exists="replace", index=False)
+df.to_sql(
+    name="booths",
+    con=data_engine,
+    if_exists="replace",
+    index=False
+)
 
-print("Success! Upgraded table 'booths' (with Digital/Vintage types) has been loaded into MySQL.")
+print("Success! Clean photobooth data loaded into MySQL.")
