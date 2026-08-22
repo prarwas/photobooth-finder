@@ -1,6 +1,9 @@
 from pathlib import Path
 import streamlit as st
 import pandas as pd
+import ssl
+import certifi
+import altair as alt
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
 from streamlit_js_eval import get_geolocation
@@ -35,78 +38,145 @@ df = load_data()
 # =====================================================================
 # 2. SIDEBAR LAYOUT & ADDRESS SELECTION WITH RESET BUTTON
 # =====================================================================
+
 st.sidebar.header("📍 Your Location Settings")
 
-# Dynamically calculate the filter options based on the dataset tags
-unique_types = sorted(df['Type'].dropna().unique().tolist())
+unique_types = sorted(df["Type"].dropna().unique().tolist())
 filter_options = ["All"] + unique_types
 
 booth_filter = st.sidebar.radio(
-    "🎞️ Select Photobooth Type:",
+    "🎞️ Select Photobooth Style:",
     options=filter_options,
     index=0
 )
+
 st.sidebar.write("---")
 
-# Trigger the native browser location bridge automatically
+# Browser geolocation
 location_data = get_geolocation()
 
-user_lat = None
-user_lon = None
+browser_lat = None
+browser_lon = None
 
-if location_data and 'coords' in location_data:
-    user_lat = location_data['coords']['latitude']
-    user_lon = location_data['coords']['longitude']
-    st.sidebar.success("🎯 Successfully locked onto your browser location!")
-else:
-    st.sidebar.info("Waiting for browser location access...")
+if location_data and "coords" in location_data:
+    browser_lat = location_data["coords"]["latitude"]
+    browser_lon = location_data["coords"]["longitude"]
 
-st.sidebar.write("Or enter a custom address/neighborhood:")
+# Store selected location across Streamlit reruns
+if "selected_lat" not in st.session_state:
+    st.session_state.selected_lat = 40.7282
 
-# 1. --- NEW RESET BUTTON LOGIC ---
-# Create a session state key to keep track of whether the user wants a hard reset
-if "reset_clicked" not in st.session_state:
-    st.session_state.reset_clicked = False
+if "selected_lon" not in st.session_state:
+    st.session_state.selected_lon = -73.7949
 
-# Render the layout components
-address_input = st.sidebar.text_input(
-    "Enter Address:", 
-    value="Queens, New York" if not user_lat else f"{user_lat}, {user_lon}",
-    key="address_bar"
+if "selected_location_name" not in st.session_state:
+    st.session_state.selected_location_name = "Queens, New York"
+
+
+# -------------------------------------------------------------
+# Manual location search
+# -------------------------------------------------------------
+
+with st.sidebar.form("location_search_form"):
+
+    address_input = st.text_input(
+        "Enter an address, neighborhood, or city:",
+        placeholder="e.g. Brooklyn, New York"
+    )
+
+    search_clicked = st.form_submit_button(
+        "🔎 Search Location",
+        use_container_width=True
+    )
+
+
+ssl_context = ssl.create_default_context(
+    cafile=certifi.where()
 )
 
-# Render a clean button underneath the input field
-if st.sidebar.button("🔄 Reset to Nearest Me", use_container_width=True):
-    st.session_state.reset_clicked = True
-    # Force a rerun to instantly clear out custom overrides
-    st.rerun()
+geolocator = Nominatim(
+    user_agent="nearme_photobooth_finder",
+    ssl_context=ssl_context
+)
 
-# 2. Resolve final coordinates based on button state vs text bar input
-geolocator = Nominatim(user_agent="nearme_photobooth_finder")
-manual_lat, manual_lon = 40.7128, -74.0060  # NYC default fallback
+if search_clicked:
 
-# If reset was clicked, bypass the custom text input completely and fetch browser location
-if st.session_state.reset_clicked and user_lat and user_lon:
-    manual_lat = user_lat
-    manual_lon = user_lon
-    # Reset our state tracker flag for the next layout iteration
-    st.session_state.reset_clicked = False
-elif address_input:
-    try:
-        if "," in address_input and any(char.isdigit() for char in address_input):
-            lat_str, lon_str = address_input.split(",")
-            manual_lat = float(lat_str.strip())
-            manual_lon = float(lon_str.strip())
-        else:
-            location = geolocator.geocode(address_input)
+    if not address_input.strip():
+
+        st.sidebar.warning(
+            "Enter a location before searching."
+        )
+
+    else:
+
+        try:
+
+            location = geolocator.geocode(
+                address_input,
+                exactly_one=True
+            )
+
             if location:
-                manual_lat = location.latitude
-                manual_lon = location.longitude
+
+                st.session_state.selected_lat = location.latitude
+                st.session_state.selected_lon = location.longitude
+                st.session_state.selected_location_name = (
+                    location.address
+                )
+
+                st.sidebar.success(
+                    f"Using: {location.address}"
+                )
+
             else:
-                st.sidebar.error("Address not found. Using fallback coordinates.")
-    except Exception:
-        if user_lat and user_lon:
-            manual_lat, manual_lon = user_lat, user_lon
+
+                st.sidebar.error(
+                    "Location not found. Try a more specific address."
+                )
+
+        except Exception as exc:
+
+            st.sidebar.error(
+                f"Could not resolve that location: {exc}"
+            )
+
+
+# -------------------------------------------------------------
+# Browser-location button
+# -------------------------------------------------------------
+
+if st.sidebar.button(
+    "📍 Use My Current Location",
+    use_container_width=True
+):
+
+    if browser_lat is not None and browser_lon is not None:
+
+        st.session_state.selected_lat = browser_lat
+        st.session_state.selected_lon = browser_lon
+        st.session_state.selected_location_name = "Current location"
+
+        st.rerun()
+
+    else:
+
+        st.sidebar.warning(
+            "Browser location is not available yet."
+        )
+
+
+manual_lat = st.session_state.selected_lat
+manual_lon = st.session_state.selected_lon
+
+
+st.sidebar.caption(
+    f"Current search center: "
+    f"{st.session_state.selected_location_name}"
+)
+
+st.sidebar.caption(
+    f"{manual_lat:.5f}, {manual_lon:.5f}"
+)
 
 # =====================================================================
 # 3. IN-MEMORY GEOSPATIAL ENGINE (WITH "YOU ARE HERE" PIN)
@@ -205,3 +275,240 @@ if not closest_df.empty:
                 )
 else:
     st.info(f"No {booth_filter} photobooths found matching this area.")
+
+# =====================================================================
+# 5. LOCAL COVERAGE ANALYTICS
+# =====================================================================
+
+st.divider()
+
+st.subheader("📊 Local Coverage Insights")
+
+st.caption(
+    "Explore photobooth availability around the selected location."
+)
+
+if not filtered_df.empty:
+
+    nearest_distance = filtered_df["distance_miles"].min()
+
+    booths_within_1 = int(
+        (filtered_df["distance_miles"] <= 1).sum()
+    )
+
+    booths_within_5 = int(
+        (filtered_df["distance_miles"] <= 5).sum()
+    )
+
+    booths_within_10 = int(
+        (filtered_df["distance_miles"] <= 10).sum()
+    )
+
+    # -------------------------------------------------------------
+    # KPI metrics
+    # -------------------------------------------------------------
+
+    metric1, metric2, metric3, metric4 = st.columns(4)
+
+    metric1.metric(
+        "Nearest Booth",
+        f"{nearest_distance:.2f} mi"
+    )
+
+    metric2.metric(
+        "Within 1 Mile",
+        booths_within_1
+    )
+
+    metric3.metric(
+        "Within 5 Miles",
+        booths_within_5
+    )
+
+    metric4.metric(
+        "Within 10 Miles",
+        booths_within_10
+    )
+
+    # -------------------------------------------------------------
+    # Automatic insight
+    # -------------------------------------------------------------
+
+    singular_style_label = (
+    "photobooth"
+    if booth_filter == "All"
+    else f"{booth_filter.lower()} photobooth"
+)
+
+    plural_style_label = (
+        "photobooths"
+        if booth_filter == "All"
+        else f"{booth_filter.lower()} photobooths"
+    )
+
+    if booths_within_1 > 0:
+        insight = (
+            f"Strong immediate coverage: {booths_within_1} "
+            f"{plural_style_label} are available within 1 mile, "
+            f"with {booths_within_5} within 5 miles."
+        )
+
+    elif nearest_distance <= 3:
+        insight = (
+            f"Moderate local coverage: the nearest "
+            f"{singular_style_label} is {nearest_distance:.2f} miles away, "
+            f"with {booths_within_5} available within 5 miles."
+        )
+
+    else:
+        insight = (
+            f"Limited immediate coverage: the nearest "
+            f"{singular_style_label} is {nearest_distance:.2f} miles away. "
+            f"There are {booths_within_10} available within 10 miles."
+        )
+
+    st.info(insight)
+
+    # -------------------------------------------------------------
+    # Distance-band analysis
+    # -------------------------------------------------------------
+
+    local_coverage = filtered_df[
+        filtered_df["distance_miles"] <= 10
+    ].copy()
+
+    if not local_coverage.empty:
+
+        distance_order = [
+            "0–1 mi",
+            "1–3 mi",
+            "3–5 mi",
+            "5–10 mi"
+        ]
+
+        local_coverage["Distance Band"] = pd.cut(
+            local_coverage["distance_miles"],
+            bins=[-0.001, 1, 3, 5, 10],
+            labels=distance_order
+        )
+
+        coverage_counts = (
+            local_coverage["Distance Band"]
+            .value_counts(sort=False)
+            .rename_axis("Distance Band")
+            .reset_index(name="Photobooths")
+        )
+
+        st.write("#### Availability by Distance")
+
+        distance_chart = (
+            alt.Chart(coverage_counts)
+            .mark_bar()
+            .encode(
+                x=alt.X(
+                    "Distance Band:N",
+                    sort=distance_order,
+                    title="Distance from selected location"
+                ),
+                y=alt.Y(
+                    "Photobooths:Q",
+                    title="Number of photobooths"
+                ),
+                tooltip=[
+                    alt.Tooltip(
+                        "Distance Band:N",
+                        title="Distance"
+                    ),
+                    alt.Tooltip(
+                        "Photobooths:Q",
+                        title="Photobooths"
+                    )
+                ]
+            )
+            .properties(
+                height=300
+            )
+        )
+
+        distance_labels = (
+            alt.Chart(coverage_counts)
+            .mark_text(
+                dy=-10,
+                fontSize=14
+            )
+            .encode(
+                x=alt.X(
+                    "Distance Band:N",
+                    sort=distance_order
+                ),
+                y="Photobooths:Q",
+                text="Photobooths:Q"
+            )
+        )
+
+        st.altair_chart(
+            distance_chart + distance_labels,
+            use_container_width=True
+        )
+
+    # -------------------------------------------------------------
+    # Style distribution
+    # -------------------------------------------------------------
+
+    if booth_filter == "All":
+
+        nearby_styles = filtered_df[
+            filtered_df["distance_miles"] <= 10
+        ]["Type"].fillna("Unclassified")
+
+        if not nearby_styles.empty:
+
+            type_counts = (
+                nearby_styles
+                .value_counts()
+                .rename_axis("Photobooth Style")
+                .reset_index(name="Photobooths")
+            )
+
+            st.write("#### Styles Available Within 10 Miles")
+
+            style_chart = (
+                alt.Chart(type_counts)
+                .mark_bar()
+                .encode(
+                    y=alt.Y(
+                        "Photobooth Style:N",
+                        sort="-x",
+                        title=None
+                    ),
+                    x=alt.X(
+                        "Photobooths:Q",
+                        title="Number of photobooths"
+                    ),
+                    tooltip=[
+                        alt.Tooltip(
+                            "Photobooth Style:N",
+                            title="Style"
+                        ),
+                        alt.Tooltip(
+                            "Photobooths:Q",
+                            title="Photobooths"
+                        )
+                    ]
+                )
+                .properties(
+                    height=250
+                )
+            )
+
+            st.altair_chart(
+                style_chart,
+                use_container_width=True
+            )
+
+else:
+
+    st.info(
+        "Coverage analytics are unavailable because "
+        "no photobooths match the current filter."
+    )
