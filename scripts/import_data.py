@@ -68,7 +68,12 @@ def validate_data(df):
         subset=["Title", "latitude", "longitude"]
     ).sum()
 
-    valid_types = ["Digital", "Vintage"]
+    valid_types = [
+    "Digital",
+    "Vintage",
+    "Receipt",
+    "Newspaper"
+]
 
     invalid_type_count = (
         ~df["Type"].isin(valid_types)
