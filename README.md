@@ -435,6 +435,13 @@ Planned improvements include:
 
 ---
 
+## AI-Assisted Development
+
+AI tools were used during development as a coding and learning assistant, including support with debugging, code refactoring, troubleshooting technical issues, and improving project documentation.
+
+The project concept, dataset collection, feature decisions, testing, validation, and final implementation decisions were completed and reviewed by me. AI-generated suggestions were evaluated, modified, and tested before being incorporated into the application.
+
+---
 ## What I Learned
 
 Building Photobooth Finder required working across the full lifecycle of a data application:
