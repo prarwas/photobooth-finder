@@ -11,7 +11,7 @@ from streamlit_js_eval import get_geolocation
 # Set up the web page title
 st.set_page_config(page_title="Photobooth Finder", layout="wide")
 st.title("📸 NearMe Photobooth Finder")
-st.write("This app runs entirely in-memory for instant calculations and 24/7 availability.")
+st.write("Search and compare nearby photobooths using real-time geospatial calculations.")
 
 # =====================================================================
 # 1. DATA LAYER (LOAD LOCAL CSV DIRECTLY)
