@@ -1,3 +1,4 @@
+from pathlib import Path
 import streamlit as st
 import pandas as pd
 from geopy.distance import geodesic
@@ -12,10 +13,18 @@ st.write("This app runs entirely in-memory for instant calculations and 24/7 ava
 # =====================================================================
 # 1. DATA LAYER (LOAD LOCAL CSV DIRECTLY)
 # =====================================================================
+DATA_PATH = (
+    Path(__file__).resolve().parent
+    / "data"
+    / "processed"
+    / "clean_booths.csv"
+)
+
 @st.cache_data
+
 def load_data():
     # Streamlit loads the file directly from your GitHub repo or local folder
-    df = pd.read_csv("clean_booths.csv")
+    df = pd.read_csv(DATA_PATH)
     # Clean coordinate types immediately to guarantee rendering safety
     df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
     df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')

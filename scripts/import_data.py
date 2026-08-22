@@ -98,7 +98,14 @@ def validate_data(df):
 # 2. LOAD DATA AND EXECUTE EXTRACTION & CLEANING
 # =====================================================================
 # Load your exact Google Takeout CSV file
-csv_file_path = Path(__file__).resolve().parent / "photobooths - photobooths.csv"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+csv_file_path = (
+    PROJECT_ROOT
+    / "data"
+    / "raw"
+    / "photobooths_raw.csv"
+)
 df = pd.read_csv(csv_file_path)
 
 print(f"Processing {len(df)} rows from your CSV...")

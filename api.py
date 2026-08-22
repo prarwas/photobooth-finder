@@ -1,3 +1,4 @@
+from pathlib import Path
 from fastapi import FastAPI, Query
 import pandas as pd
 from geopy.distance import geodesic
@@ -5,7 +6,14 @@ from typing import Optional
 
 app = FastAPI(title="Photobooth Locator API")
 
-df = pd.read_csv("clean_booths.csv")
+DATA_PATH = (
+    Path(__file__).resolve().parent
+    / "data"
+    / "processed"
+    / "clean_booths.csv"
+)
+
+df = pd.read_csv(DATA_PATH)
 
 # --- NEW ENDPOINT: Dynamically fetch all unique types ---
 @app.get("/api/types")

@@ -1,10 +1,20 @@
+from pathlib import Path
 import os
 
 import pandas as pd
+
 from dotenv import load_dotenv
 from sqlalchemy import URL, create_engine
 
 load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+OUTPUT_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "clean_booths.csv"
+)
 
 database_url = URL.create(
     "mysql+pymysql",
@@ -27,9 +37,9 @@ df = pd.read_sql(
     engine,
 )
 
-df.to_csv("clean_booths.csv", index=False)
+df.to_csv(OUTPUT_PATH, index=False)
 
 print(
     f"Success! Exported {len(df)} valid photobooth locations "
-    "to clean_booths.csv"
+    f"to {OUTPUT_PATH}"
 )
